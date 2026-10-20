@@ -20,7 +20,10 @@ oder der letzten **3 Monate** sucht und jedes Release mit **YouTube Music** verk
 
 ## APK installieren
 
-Jeder Push baut über GitHub Actions eine installierbare APK:
+**Direkter Download (immer der neueste Build):**
+https://github.com/eightbitspliff/dnb-scanner/releases/latest/download/dnb-scanner.apk
+
+Alternativ liegt jede APK auch als Build-Artefakt bei GitHub Actions:
 
 1. Im Repo auf **Actions → Android Build** → letzten Lauf öffnen
 2. Unter **Artifacts** `dnb-scanner-apk` herunterladen und entpacken

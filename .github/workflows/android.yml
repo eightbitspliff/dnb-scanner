@@ -36,8 +36,21 @@ jobs:
           name: dnb-scanner-apk
           path: out/dnb-scanner.apk
 
-      - name: GitHub Release (nur bei Tags v*)
+      - name: Versions-Release (bei Tags v*)
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
+          files: out/dnb-scanner.apk
+
+      - name: Release "latest" mit aktueller APK aktualisieren
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/')
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: DnB Scanner (neuester Build)
+          target_commitish: ${{ github.sha }}
+          make_latest: true
+          body: |
+            Automatisch gebaute APK vom Branch `${{ github.ref_name }}` (Commit ${{ github.sha }}).
+            Direkter Download: https://github.com/${{ github.repository }}/releases/latest/download/dnb-scanner.apk
           files: out/dnb-scanner.apk
