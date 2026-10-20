@@ -1,0 +1,41 @@
+package com.dnbscanner.app.model
+
+import com.dnbscanner.app.data.TextNorm
+import java.time.LocalDate
+
+enum class Genre(val label: String) {
+    DNB("Drum & Bass"),
+    JUNGLE("Jungle"),
+}
+
+enum class Source(val label: String) {
+    BANDCAMP("Bandcamp"),
+    MUSICBRAINZ("MusicBrainz"),
+}
+
+enum class Period(val days: Long, val label: String, val pageFactor: Int) {
+    WEEK(7, "Woche", 1),
+    MONTH(30, "Monat", 3),
+    QUARTER(90, "3 Monate", 6),
+}
+
+data class Release(
+    val artist: String,
+    val title: String,
+    val releaseDate: LocalDate,
+    val label: String?,
+    val type: String?,
+    val genres: Set<Genre>,
+    val sources: Set<Source>,
+    val sourceUrls: Map<Source, String>,
+    val coverUrl: String?,
+) {
+    val key: String get() = TextNorm.releaseKey(artist, title)
+}
+
+/** Link zu YouTube Music: [direct] = konkretes Album/Video gefunden, sonst Such-Link. */
+data class YtLink(
+    val url: String,
+    val direct: Boolean,
+    val matchedText: String? = null,
+)

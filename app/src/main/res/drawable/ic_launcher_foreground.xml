@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Equalizer-Balken -->
+    <path android:fillColor="#FFF2C200" android:pathData="M34,50h6v16h-6z" />
+    <path android:fillColor="#FFF2C200" android:pathData="M43,38h6v40h-6z" />
+    <path android:fillColor="#FFF2C200" android:pathData="M52,30h6v48h-6z" />
+    <path android:fillColor="#FFF2C200" android:pathData="M61,42h6v30h-6z" />
+    <path android:fillColor="#FFF2C200" android:pathData="M70,48h6v20h-6z" />
+</vector>
