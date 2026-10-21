@@ -1,0 +1,15 @@
+name: API Probe
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - tools/api-probe.sh
+      - .github/workflows/api-probe.yml
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash tools/api-probe.sh
