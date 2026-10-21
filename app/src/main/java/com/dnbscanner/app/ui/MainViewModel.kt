@@ -5,16 +5,17 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.dnbscanner.app.data.Http
-import com.dnbscanner.app.data.MatchCache
+import com.dnbscanner.app.data.LinkCache
 import com.dnbscanner.app.data.ReleaseRepository
 import com.dnbscanner.app.data.ScanStore
 import com.dnbscanner.app.data.Settings
 import com.dnbscanner.app.data.SettingsStore
+import com.dnbscanner.app.data.SpotifyMatcher
 import com.dnbscanner.app.data.YouTubeMusicMatcher
 import com.dnbscanner.app.model.Genre
 import com.dnbscanner.app.model.Period
 import com.dnbscanner.app.model.Release
-import com.dnbscanner.app.model.YtLink
+import com.dnbscanner.app.model.MusicLink
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -41,21 +42,26 @@ data class UiState(
 class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val http = Http()
     private val repository = ReleaseRepository(http)
-    private val matchCache = MatchCache(app)
-    private val matcher = YouTubeMusicMatcher(http, matchCache)
+    private val ytCache = LinkCache(app, "yt_matches")
+    private val spotifyCache = LinkCache(app, "spotify_matches")
+    private val ytMatcher = YouTubeMusicMatcher(http, ytCache)
+    private val spotifyMatcher = SpotifyMatcher(http, spotifyCache)
     private val scanStore = ScanStore(app)
     private val settingsStore = SettingsStore(app)
 
     private val _state = MutableStateFlow(UiState(settings = settingsStore.load()))
     val state: StateFlow<UiState> = _state
 
-    /** YouTube-Music-Links pro Release-Key. */
-    val links = mutableStateMapOf<String, YtLink>()
-    val matching = mutableStateMapOf<String, Boolean>()
+    /** Gefundene Links pro Release-Key. */
+    val ytLinks = mutableStateMapOf<String, MusicLink>()
+    val spotifyLinks = mutableStateMapOf<String, MusicLink>()
+    val ytMatching = mutableStateMapOf<String, Boolean>()
+    val spotifyMatching = mutableStateMapOf<String, Boolean>()
 
     private var scanJob: Job? = null
     private var matchJob: Job? = null
-    private val matchPermits = Semaphore(3)
+    private val ytPermits = Semaphore(3)
+    private val spotifyPermits = Semaphore(2)
 
     init {
         selectPeriod(Period.WEEK)
@@ -104,40 +110,70 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private fun startMatching(releases: List<Release>) {
-        releases.forEach { r -> matcher.cached(r)?.let { links[r.key] = it } }
+        releases.forEach { r ->
+            ytMatcher.cached(r)?.let { ytLinks[r.key] = it }
+            spotifyMatcher.cached(r)?.let { spotifyLinks[r.key] = it }
+        }
         matchJob?.cancel()
         if (!_state.value.settings.autoMatch) return
         matchJob = viewModelScope.launch {
-            releases.filter { it.key !in links }.forEach { r ->
-                launch { matchOne(r) }
-            }
+            releases.forEach { r -> launch { matchRelease(r, force = false) } }
         }
     }
 
-    /** Sucht einen einzelnen Release (auch manuell per Button, wenn Auto-Match aus ist). */
-    fun match(release: Release) {
-        if (matching[release.key] == true) return
-        viewModelScope.launch { matchOne(release, force = true) }
+    /** Erneuter Abgleich eines einzelnen Release (Button in der Karte). */
+    fun retryMatch(release: Release) {
+        viewModelScope.launch { matchRelease(release, force = true) }
     }
 
-    private suspend fun matchOne(release: Release, force: Boolean = false) {
-        matchPermits.withPermit {
-            if (links[release.key]?.direct == true) return
-            matching[release.key] = true
+    private suspend fun matchRelease(release: Release, force: Boolean) {
+        matchYouTube(release, force)
+        matchSpotify(release, force)
+    }
+
+    private suspend fun matchYouTube(release: Release, force: Boolean) {
+        ytPermits.withPermit {
+            if (!force && ytLinks[release.key]?.direct == true) return
+            if (ytMatching[release.key] == true) return
+            ytMatching[release.key] = true
             try {
-                links[release.key] = matcher.match(release, force)
+                ytLinks[release.key] = ytMatcher.match(release, force)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                links[release.key] = YtLink(YouTubeMusicMatcher.searchUrl(release), direct = false)
+                // Fallback ist der Such-Link (siehe ytLinkFor)
             } finally {
-                matching.remove(release.key)
+                ytMatching.remove(release.key)
             }
         }
     }
 
-    fun linkFor(release: Release): YtLink =
-        links[release.key] ?: YtLink(YouTubeMusicMatcher.searchUrl(release), direct = false)
+    private suspend fun matchSpotify(release: Release, force: Boolean) {
+        spotifyPermits.withPermit {
+            if (!force && spotifyLinks[release.key]?.direct == true) return
+            if (spotifyMatching[release.key] == true) return
+            spotifyMatching[release.key] = true
+            try {
+                spotifyMatcher.match(release, ytLinks[release.key], _state.value.settings, force)
+                    ?.let { spotifyLinks[release.key] = it }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // Fallback ist der Such-Link (siehe spotifyLinkFor)
+            } finally {
+                spotifyMatching.remove(release.key)
+            }
+        }
+    }
+
+    fun ytLinkFor(release: Release): MusicLink =
+        ytLinks[release.key] ?: MusicLink(YouTubeMusicMatcher.searchUrl(release), direct = false)
+
+    fun spotifyLinkFor(release: Release): MusicLink =
+        spotifyLinks[release.key] ?: MusicLink(SpotifyMatcher.searchUrl(release), direct = false)
+
+    fun hasDirectLink(release: Release): Boolean =
+        ytLinks[release.key]?.direct == true || spotifyLinks[release.key]?.direct == true
 
     fun setQuery(q: String) = _state.update { it.copy(query = q) }
 
@@ -155,8 +191,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun clearMatchCache() {
-        matchCache.clear()
-        links.clear()
+        ytCache.clear()
+        spotifyCache.clear()
+        ytLinks.clear()
+        spotifyLinks.clear()
         startMatching(_state.value.releases)
     }
 

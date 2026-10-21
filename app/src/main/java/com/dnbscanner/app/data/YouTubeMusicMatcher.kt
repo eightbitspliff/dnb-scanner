@@ -1,7 +1,7 @@
 package com.dnbscanner.app.data
 
 import com.dnbscanner.app.model.Release
-import com.dnbscanner.app.model.YtLink
+import com.dnbscanner.app.model.MusicLink
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
@@ -12,11 +12,11 @@ import java.net.URLEncoder
  * Sucht ein Release in YouTube Music (Web-Client-API, kein API-Key nötig) und liefert
  * einen direkten Album- bzw. Song-Link. Ohne Treffer gibt es einen Such-Link.
  */
-class YouTubeMusicMatcher(private val http: Http, private val cache: MatchCache) {
+class YouTubeMusicMatcher(private val http: Http, private val cache: LinkCache) {
 
-    fun cached(release: Release): YtLink? = cache.get(release.key)
+    fun cached(release: Release): MusicLink? = cache.get(release.key)
 
-    suspend fun match(release: Release, force: Boolean = false): YtLink = withContext(Dispatchers.IO) {
+    suspend fun match(release: Release, force: Boolean = false): MusicLink = withContext(Dispatchers.IO) {
         if (!force) cache.get(release.key)?.let { return@withContext it }
         val query = searchQuery(release)
         var found: Candidate? = null
@@ -25,8 +25,8 @@ class YouTubeMusicMatcher(private val http: Http, private val cache: MatchCache)
             found = bestMatch(parseCandidates(json), release.artist, release.title)
             if (found != null) break
         }
-        val link = found?.let { YtLink(it.url, direct = true, matchedText = it.texts.take(3).joinToString(" · ")) }
-            ?: YtLink(searchUrl(release), direct = false)
+        val link = found?.let { MusicLink(it.url, direct = true, matchedText = it.texts.take(3).joinToString(" · ")) }
+            ?: MusicLink(searchUrl(release), direct = false)
         cache.put(release.key, link)
         link
     }
@@ -93,27 +93,12 @@ class YouTubeMusicMatcher(private val http: Http, private val cache: MatchCache)
             }
         }
 
-        fun bestMatch(candidates: List<Candidate>, artist: String, title: String): Candidate? {
-            val titleTokens = TextNorm.tokens(TextNorm.cleanTitle(title)).toSet()
-            val artistTokens = TextNorm.tokens(TextNorm.cleanArtist(artist)).toSet()
-            if (titleTokens.isEmpty()) return null
-            return candidates
-                .map { it to score(it, titleTokens, artistTokens) }
+        fun bestMatch(candidates: List<Candidate>, artist: String, title: String): Candidate? =
+            candidates
+                .map { it to Matching.score(it.texts, artist, title) }
                 .filter { it.second > 0.0 }
-                .maxByOrNull { it.second }
+                .maxByOrNull { (c, score) -> score + if (c.browseId != null) 0.05 else 0.0 }
                 ?.first
-        }
-
-        private fun score(c: Candidate, titleTokens: Set<String>, artistTokens: Set<String>): Double {
-            val hay = TextNorm.tokens(c.texts.joinToString(" ")).toSet()
-            val titleCov = titleTokens.count { it in hay }.toDouble() / titleTokens.size
-            val artistCov = if (artistTokens.isEmpty()) 1.0 else artistTokens.count { it in hay }.toDouble() / artistTokens.size
-            if (titleCov < 0.6 || artistCov < 0.5) return 0.0
-            // Erster Text ist der Titel des Treffers: exakte Übereinstimmung bevorzugen.
-            val first = TextNorm.cleanTitle(c.texts.firstOrNull().orEmpty())
-            val exact = if (TextNorm.tokens(first).toSet() == titleTokens) 0.2 else 0.0
-            return titleCov * 0.5 + artistCov * 0.3 + exact + if (c.browseId != null) 0.05 else 0.0
-        }
 
         private fun collectRenderers(node: Any?, out: MutableList<JSONObject>) {
             when (node) {

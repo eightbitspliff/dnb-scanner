@@ -1,5 +1,6 @@
 package com.dnbscanner.app.data
 
+import okhttp3.FormBody
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -21,10 +22,17 @@ class Http(private val client: OkHttpClient = defaultClient()) {
         return execute(builder.build())
     }
 
+    fun postForm(url: String, form: Map<String, String>, headers: Map<String, String> = emptyMap()): String {
+        val body = FormBody.Builder().apply { form.forEach { (k, v) -> add(k, v) } }.build()
+        val builder = Request.Builder().url(url).post(body)
+        headers.forEach { (k, v) -> builder.header(k, v) }
+        return execute(builder.build())
+    }
+
     private fun execute(request: Request): String {
         client.newCall(request).execute().use { response ->
             if (!response.isSuccessful) {
-                throw IOException("HTTP ${response.code} für ${request.url.host}")
+                throw HttpStatusException(response.code, request.url.host)
             }
             return response.body?.string() ?: throw IOException("Leere Antwort von ${request.url.host}")
         }
@@ -44,3 +52,5 @@ class Http(private val client: OkHttpClient = defaultClient()) {
             .build()
     }
 }
+
+class HttpStatusException(val code: Int, host: String) : IOException("HTTP $code für $host")

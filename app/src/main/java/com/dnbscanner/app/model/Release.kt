@@ -33,8 +33,8 @@ data class Release(
     val key: String get() = TextNorm.releaseKey(artist, title)
 }
 
-/** Link zu YouTube Music: [direct] = konkretes Album/Video gefunden, sonst Such-Link. */
-data class YtLink(
+/** Link zu YouTube Music / Spotify: [direct] = konkretes Album/Song gefunden, sonst Such-Link. */
+data class MusicLink(
     val url: String,
     val direct: Boolean,
     val matchedText: String? = null,

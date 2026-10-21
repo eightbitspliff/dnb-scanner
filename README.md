@@ -14,6 +14,12 @@ oder der letzten **3 Monate** sucht und jedes Release mit **YouTube Music** verk
   - ▶ **YouTube Music** = direkter Link zum gefundenen Album/Song (öffnet die YT-Music-App)
   - 🔍 **In YT Music suchen** = kein sicherer Treffer, öffnet die Suche mit Artist + Titel
   - Treffer werden auf dem Gerät gespeichert; Fehlschläge werden nach 3 Tagen erneut versucht
+- **Spotify-Link** neben YouTube Music:
+  - mit eigener Spotify Client-ID/Secret (developer.spotify.com, in den Einstellungen) direkt über die Spotify-API
+  - ohne Zugangsdaten über song.link: der gefundene YouTube-Music-Link wird in den Spotify-Link umgewandelt
+    (ca. 10 Releases pro Minute, läuft im Hintergrund weiter)
+  - sonst Spotify-Suche mit Artist + Titel
+- Dunkles Neon-Design im Rave-Look mit Equalizer im 174-BPM-Takt, Pull-to-Refresh
 - Filter nach Genre, „Nur mit YT-Music-Treffer“, Textsuche (Artist/Titel/Label)
 - Teilen-Button, Links zur Quelle (Bandcamp / MusicBrainz)
 - Ergebnisse werden pro Zeitraum gespeichert und nach 6 Stunden automatisch aktualisiert
