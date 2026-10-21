@@ -37,6 +37,18 @@ class GenreClassifierTest {
     }
 
     @Test
+    fun rejectsReleasesWhereDnbIsOnlyASideTag() {
+        // Unbekannte/fremde Genres verdrängen ein einzelnes DnB-Tag
+        assertTrue(c("electronic", "leftfield", "bassline", "drum and bass", "jersey club", "london").isEmpty())
+        assertTrue(c("electronic", "experimental", "idm", "drum and bass", "glitch", "footwork", "berlin").isEmpty())
+        assertTrue(c("drum and bass", "dubstep", "london").isEmpty())
+        // Typische echte DnB-Releases bleiben drin
+        assertEquals(setOf(Genre.DNB, Genre.JUNGLE), c("electronic", "drum & bass", "jungle", "liquid", "dnb", "breakbeat", "rollers", "london"))
+        assertEquals(setOf(Genre.DNB), c("electronic", "drum and bass", "bristol"))
+        assertEquals(setOf(Genre.JUNGLE), c("jungle", "ragga", "amen", "hardcore"))
+    }
+
+    @Test
     fun displayTagsPutGenreTagsFirst() {
         assertEquals(listOf("jungle", "drum & bass", "electronic", "london"), GenreClassifier.displayTags(listOf("Electronic", "jungle", "London", "Drum & Bass")))
     }

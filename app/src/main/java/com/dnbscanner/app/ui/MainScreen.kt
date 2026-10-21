@@ -431,11 +431,11 @@ private fun ReleaseCard(
                 )
                 if (release.tags.isNotEmpty()) {
                     Text(
-                        release.tags.take(4).joinToString("  ") { "#$it" },
+                        release.tags.take(8).joinToString("  ") { "#$it" },
                         color = accent.copy(alpha = 0.7f),
                         fontSize = 10.sp,
                         fontFamily = FontFamily.Monospace,
-                        maxLines = 1,
+                        maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.padding(top = 2.dp),
                     )

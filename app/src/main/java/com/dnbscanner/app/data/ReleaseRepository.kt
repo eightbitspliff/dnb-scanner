@@ -77,7 +77,8 @@ class ReleaseRepository(http: Http, private val tagStore: TagStore = MemoryTagSt
             async {
                 permits.withPermit {
                     val url = r.sourceUrls[Source.BANDCAMP] ?: return@withPermit null
-                    val tags = r.tags.takeIf { it.isNotEmpty() } ?: tagStore.get(url) ?: try {
+                    // Immer die Tags der Release-Seite verwenden – die Discover-Suche ist dafür nicht verlässlich.
+                    val tags = tagStore.get(url) ?: try {
                         bandcamp.fetchTags(url).also { if (it.isNotEmpty()) tagStore.put(url, it) else blocked.incrementAndGet() }
                     } catch (e: CancellationException) {
                         throw e

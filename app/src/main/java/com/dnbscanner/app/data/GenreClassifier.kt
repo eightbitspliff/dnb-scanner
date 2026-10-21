@@ -3,8 +3,9 @@ package com.dnbscanner.app.data
 import com.dnbscanner.app.model.Genre
 
 /**
- * Strenge Genre-Prüfung anhand der Tags eines Releases: Es zählt nur als DnB/Jungle,
- * wenn entsprechende Tags vorhanden sind und nicht von anderen Genres überwogen werden.
+ * Strenge Genre-Prüfung anhand der Tags eines Releases: Es zählt nur als DnB/Jungle, wenn
+ * mindestens die Hälfte aller (nicht neutralen) Tags DnB/Jungle-Tags sind und bekannte
+ * fremde Genres nicht überwiegen.
  */
 object GenreClassifier {
     private val dnbContains = listOf("drum and bass", "drum n bass", "drum bass", "drumnbass", "drumandbass", "drum n b")
@@ -14,6 +15,15 @@ object GenreClassifier {
         "minimal dnb", "dancefloor dnb", "intelligent dnb", "atmospheric dnb", "dnb liquid",
     )
     private val jungleExclusions = listOf("jungle terror", "jungle house", "jungle juice")
+
+    /** Tags ohne Genre-Aussage – zählen weder dafür noch dagegen. */
+    private val neutral = setOf(
+        "electronic", "electronica", "electronic music", "bass", "bass music", "breakbeat", "breaks", "rave", "uk",
+        "dance", "dance music", "instrumental", "music", "dj", "dj mix", "mix", "ep", "album", "single", "lp", "vinyl",
+        "free", "free download", "underground", "club", "various artists", "compilation", "va", "oldschool",
+        "old school", "hardcore", "breakbeat hardcore", "amen", "amen break", "sample", "samples", "producer",
+    )
+    private const val MIN_SHARE = 0.5
 
     private val conflictExact = setOf(
         "pop", "rap", "trap", "edm", "idm", "rnb", "r and b", "soul", "jazz", "funk", "disco", "folk", "indie", "punk",
@@ -44,15 +54,15 @@ object GenreClassifier {
 
     /** Leere Menge = kein DnB/Jungle. */
     fun classify(tags: Collection<String>): Set<Genre> {
-        val distinct = tags.map { TextNorm.normalize(it) }.filter { it.isNotBlank() }.distinct()
-        val dnb = distinct.count(::isDnb)
-        val jungle = distinct.count(::isJungle)
-        val conflicts = distinct.count(::isConflict)
+        val distinct = tags.map { TextNorm.normalize(it) }.filter { it.isNotBlank() && it !in neutral }.distinct()
         val matching = distinct.count { isDnb(it) || isJungle(it) }
-        if (matching == 0 || matching < conflicts) return emptySet()
+        if (matching == 0) return emptySet()
+        val conflicts = distinct.count(::isConflict)
+        if (conflicts > matching) return emptySet()
+        if (matching.toDouble() / distinct.size < MIN_SHARE) return emptySet()
         return buildSet {
-            if (dnb > 0) add(Genre.DNB)
-            if (jungle > 0) add(Genre.JUNGLE)
+            if (distinct.any(::isDnb)) add(Genre.DNB)
+            if (distinct.any(::isJungle)) add(Genre.JUNGLE)
         }
     }
 

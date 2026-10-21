@@ -51,8 +51,8 @@ class ScanStore(context: Context) {
                 .put("releases", arr)
         }
 
-        /** Version 2: strenge Genre-Prüfung – ältere, ungeprüfte Ergebnisse werden verworfen. */
-        private const val FORMAT_VERSION = 2
+        /** Version 3: strengere Genre-Prüfung – ältere Ergebnisse werden verworfen. */
+        private const val FORMAT_VERSION = 3
 
         fun fromJson(period: Period, json: JSONObject): ScanResult? {
             if (json.optInt("version") != FORMAT_VERSION) return null
