@@ -8,9 +8,9 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.IOException
 import java.util.concurrent.TimeUnit
 
-class Http(private val client: OkHttpClient = defaultClient()) {
+open class Http(private val client: OkHttpClient = defaultClient()) {
 
-    fun get(url: String, headers: Map<String, String> = emptyMap()): String {
+    open fun get(url: String, headers: Map<String, String> = emptyMap()): String {
         val builder = Request.Builder().url(url)
         headers.forEach { (k, v) -> builder.header(k, v) }
         return execute(builder.build())
@@ -32,7 +32,7 @@ class Http(private val client: OkHttpClient = defaultClient()) {
     private fun execute(request: Request): String {
         client.newCall(request).execute().use { response ->
             if (!response.isSuccessful) {
-                throw HttpStatusException(response.code, request.url.host)
+                throw HttpStatusException(response.code, request.url.host, response.header("Retry-After")?.trim()?.toLongOrNull())
             }
             return response.body?.string() ?: throw IOException("Leere Antwort von ${request.url.host}")
         }
@@ -53,4 +53,9 @@ class Http(private val client: OkHttpClient = defaultClient()) {
     }
 }
 
-class HttpStatusException(val code: Int, host: String) : IOException("HTTP $code für $host")
+class HttpStatusException(
+    val code: Int,
+    host: String,
+    /** Wartezeit in Sekunden laut Server (Header Retry-After), falls angegeben. */
+    val retryAfterSeconds: Long? = null,
+) : IOException("HTTP $code für $host")

@@ -5,18 +5,30 @@ import com.dnbscanner.app.model.Release
 import com.dnbscanner.app.model.Source
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
+import java.io.IOException
 import java.net.URLEncoder
 import java.time.LocalDate
 
 /**
  * Release-Groups mit DnB-/Jungle-Tags aus der offenen MusicBrainz-Datenbank.
- * MusicBrainz erlaubt max. 1 Anfrage pro Sekunde.
+ * MusicBrainz erlaubt max. 1 Anfrage pro Sekunde und antwortet bei Überlast mit HTTP 503:
+ * Alle Anfragen laufen deshalb über ein gemeinsames Tempolimit und werden bei 503/429 wiederholt.
  */
-class MusicBrainzSource(private val http: Http) {
+class MusicBrainzSource(
+    private val http: Http,
+    private val minIntervalMs: Long = 1200,
+    private val retryBaseMs: Long = 2000,
+    private val maxRetries: Int = 4,
+) {
+    private val rateLock = Mutex()
+    private var lastRequest = 0L
 
-    data class Result(val releases: List<Release>, val total: Int, val loaded: Int)
+    /** [error] ist gesetzt, wenn nach dem Laden einiger Seiten abgebrochen werden musste (Teilergebnis). */
+    data class Result(val releases: List<Release>, val total: Int, val loaded: Int, val error: String? = null)
 
     /**
      * [queryFrom]/[queryTo] sind die Grenzen im Such-Index (z.B. "1995" bzw. "2026-10-21"), damit auch
@@ -34,10 +46,15 @@ class MusicBrainzSource(private val http: Http) {
         var offset = 0
         var total = 0
         for (page in 0 until maxPages) {
-            if (page > 0) delay(1100)
             val url = "https://musicbrainz.org/ws/2/release-group/?fmt=json&limit=$PAGE_SIZE&offset=$offset&query=" +
                 URLEncoder.encode(query, "UTF-8")
-            val json = JSONObject(http.get(url, mapOf("User-Agent" to Http.APP_UA, "Accept" to "application/json")))
+            val json = try {
+                request(url)
+            } catch (e: IOException) {
+                // Erste Seite fehlgeschlagen: Fehler melden. Später: Teilergebnis behalten.
+                if (page == 0) throw e
+                return@withContext Result(out, total, offset, error = e.message)
+            }
             total = json.optInt("count", 0)
             val parsed = parse(json)
             parsed.filterTo(out) { it.releaseDate in from..to }
@@ -46,6 +63,28 @@ class MusicBrainzSource(private val http: Http) {
             if (groups == 0 || offset >= total) break
         }
         Result(out, total, offset)
+    }
+
+    /** Eine Anfrage mit Tempolimit; bei 503/429 bis zu [maxRetries] Wiederholungen mit wachsender Wartezeit. */
+    private suspend fun request(url: String): JSONObject {
+        var attempt = 0
+        while (true) {
+            throttle()
+            try {
+                return JSONObject(http.get(url, mapOf("User-Agent" to Http.APP_UA, "Accept" to "application/json")))
+            } catch (e: HttpStatusException) {
+                if ((e.code != 503 && e.code != 429) || attempt >= maxRetries) throw e
+                val wait = e.retryAfterSeconds?.times(1000) ?: (retryBaseMs shl attempt)
+                attempt++
+                delay(wait.coerceAtMost(30_000))
+            }
+        }
+    }
+
+    private suspend fun throttle() = rateLock.withLock {
+        val wait = lastRequest + minIntervalMs - System.currentTimeMillis()
+        if (wait > 0) delay(wait)
+        lastRequest = System.currentTimeMillis()
     }
 
     companion object {

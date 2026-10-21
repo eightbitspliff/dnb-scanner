@@ -23,9 +23,12 @@ data class ScanResult(
     val rangeKey: String = "",
 )
 
-class ReleaseRepository(http: Http, private val tagStore: TagStore = MemoryTagStore()) {
+class ReleaseRepository(
+    http: Http,
+    private val tagStore: TagStore = MemoryTagStore(),
+    private val musicBrainz: MusicBrainzSource = MusicBrainzSource(http),
+) {
     private val bandcamp = BandcampSource(http)
-    private val musicBrainz = MusicBrainzSource(http)
 
     suspend fun scan(
         period: Period,
@@ -47,8 +50,10 @@ class ReleaseRepository(http: Http, private val tagStore: TagStore = MemoryTagSt
                 } else {
                     musicBrainz.fetch(from, to, maxPages = 2 + period.pageFactor)
                 }
-                if (result.total > result.loaded) {
-                    synchronized(warnings) {
+                synchronized(warnings) {
+                    if (result.error != null) {
+                        warnings += "MusicBrainz überlastet – nur ${result.loaded} von ${result.total} Treffern geladen, später erneut scannen"
+                    } else if (result.total > result.loaded) {
                         warnings += "MusicBrainz: ${result.loaded} von ${result.total} Treffern geladen – Zeitraum eingrenzen für mehr"
                     }
                 }
@@ -56,7 +61,12 @@ class ReleaseRepository(http: Http, private val tagStore: TagStore = MemoryTagSt
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                synchronized(warnings) { warnings += "MusicBrainz: ${e.message ?: e.javaClass.simpleName}" }
+                val msg = if (e is HttpStatusException && (e.code == 503 || e.code == 429)) {
+                    "MusicBrainz ist gerade überlastet (HTTP ${e.code}) – bitte in ein paar Minuten erneut scannen"
+                } else {
+                    "MusicBrainz: ${e.message ?: e.javaClass.simpleName}"
+                }
+                synchronized(warnings) { warnings += msg }
                 emptyList()
             }
         }
