@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import com.dnbscanner.app.data.Http
 import com.dnbscanner.app.data.LinkCache
 import com.dnbscanner.app.data.PrefsTagStore
+import com.dnbscanner.app.data.ReleaseFilter
 import com.dnbscanner.app.data.ReleaseRepository
 import com.dnbscanner.app.data.ScanStore
 import com.dnbscanner.app.data.Settings
@@ -35,11 +36,9 @@ data class UiState(
     val warnings: List<String> = emptyList(),
     val rejected: Int = 0,
     val error: String? = null,
-    val genres: Set<Genre> = Genre.entries.toSet(),
-    val query: String = "",
-    /** Nur Releases mit direktem Treffer auf YouTube Music bzw. Spotify anzeigen. */
-    val onlyYouTube: Boolean = false,
-    val onlySpotify: Boolean = false,
+    val filter: ReleaseFilter = ReleaseFilter(),
+    /** Jahresbereich für den Zeitraum "Von–Bis". */
+    val years: IntRange = 2021..2026,
     val settings: Settings = Settings(),
 )
 
@@ -53,7 +52,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val scanStore = ScanStore(app)
     private val settingsStore = SettingsStore(app)
 
-    private val _state = MutableStateFlow(UiState(settings = settingsStore.load()))
+    private val _state = MutableStateFlow(UiState(settings = settingsStore.load(), years = settingsStore.loadYears()))
     val state: StateFlow<UiState> = _state
 
     /** Gefundene Links pro Release-Key. */
@@ -74,7 +73,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun selectPeriod(period: Period) {
         scanJob?.cancel()
         _state.update { it.copy(period = period, loading = false, progress = null, error = null) }
-        val cached = scanStore.load(period)
+        val rangeKey = if (period == Period.CUSTOM) _state.value.years.let { "${it.first}-${it.last}" } else ""
+        val cached = scanStore.load(period)?.takeIf { it.rangeKey == rangeKey }
         if (cached != null) {
             _state.update { it.copy(releases = cached.releases, scannedAt = cached.scannedAt, warnings = cached.warnings, rejected = cached.rejected) }
             startMatching(cached.releases)
@@ -85,14 +85,22 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** Scannt den eigenen Zeitraum "Von–Bis" (Release-Jahre). */
+    fun scanYears(years: IntRange) {
+        settingsStore.saveYears(years)
+        _state.update { it.copy(years = years) }
+        selectPeriod(Period.CUSTOM)
+    }
+
     fun scan() {
         scanJob?.cancel()
         val period = _state.value.period
         val settings = _state.value.settings
+        val years = _state.value.years
         scanJob = viewModelScope.launch {
             _state.update { it.copy(loading = true, error = null, progress = "Scan startet …") }
             try {
-                val result = repository.scan(period, settings) { msg -> _state.update { it.copy(progress = msg) } }
+                val result = repository.scan(period, settings, years) { msg -> _state.update { it.copy(progress = msg) } }
                 scanStore.save(result)
                 _state.update {
                     it.copy(
@@ -181,16 +189,23 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun isOnSpotify(release: Release): Boolean = spotifyLinks[release.key]?.direct == true
 
-    fun setQuery(q: String) = _state.update { it.copy(query = q) }
+    fun setQuery(q: String) = updateFilter { it.copy(query = q) }
 
-    fun toggleGenre(g: Genre) = _state.update {
+    fun toggleGenre(g: Genre) = updateFilter {
         val next = if (g in it.genres) it.genres - g else it.genres + g
         it.copy(genres = next.ifEmpty { Genre.entries.toSet() })
     }
 
-    fun toggleOnlyYouTube() = _state.update { it.copy(onlyYouTube = !it.onlyYouTube) }
+    fun toggleOnlyYouTube() = updateFilter { it.copy(onlyYouTube = !it.onlyYouTube) }
 
-    fun toggleOnlySpotify() = _state.update { it.copy(onlySpotify = !it.onlySpotify) }
+    fun toggleOnlySpotify() = updateFilter { it.copy(onlySpotify = !it.onlySpotify) }
+
+    fun updateFilter(change: (ReleaseFilter) -> ReleaseFilter) = _state.update { it.copy(filter = change(it.filter)) }
+
+    /** Setzt die Filter im Panel zurück; Suche, Genre- und Streaming-Chips bleiben. */
+    fun resetPanelFilters() = updateFilter {
+        ReleaseFilter(query = it.query, genres = it.genres, onlyYouTube = it.onlyYouTube, onlySpotify = it.onlySpotify)
+    }
 
     fun updateSettings(s: Settings) {
         settingsStore.save(s)

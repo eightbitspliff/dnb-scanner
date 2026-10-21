@@ -35,6 +35,18 @@ class SettingsStore(context: Context) {
         spotifyClientSecret = prefs.getString("spotify_secret", "").orEmpty(),
     )
 
+    /** Zuletzt gewählter Jahresbereich für den Zeitraum "Jahre". */
+    fun loadYears(): IntRange {
+        val now = java.time.LocalDate.now().year
+        val from = prefs.getInt("year_from", now - 5)
+        val to = prefs.getInt("year_to", now)
+        return from..to
+    }
+
+    fun saveYears(years: IntRange) {
+        prefs.edit().putInt("year_from", years.first).putInt("year_to", years.last).apply()
+    }
+
     fun save(s: Settings) {
         prefs.edit()
             .putBoolean("bandcamp", s.useBandcamp)

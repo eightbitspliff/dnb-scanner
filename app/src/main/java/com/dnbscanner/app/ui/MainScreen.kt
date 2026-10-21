@@ -1,4 +1,4 @@
-@file:OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
+@file:OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class, ExperimentalLayoutApi::class)
 
 package com.dnbscanner.app.ui
 
@@ -16,6 +16,8 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -47,6 +49,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.RangeSlider
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
@@ -81,7 +84,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
+import com.dnbscanner.app.data.ReleaseFilter
 import com.dnbscanner.app.data.Settings
+import com.dnbscanner.app.data.SortOrder
+import com.dnbscanner.app.data.TypeFilter
+import com.dnbscanner.app.model.Source
 import com.dnbscanner.app.data.TextNorm
 import com.dnbscanner.app.model.Genre
 import com.dnbscanner.app.model.MusicLink
@@ -103,17 +110,10 @@ fun MainScreen(vm: MainViewModel = viewModel()) {
     val state by vm.state.collectAsState()
     val context = LocalContext.current
     var showSettings by remember { mutableStateOf(false) }
+    var showFilters by remember { mutableStateOf(false) }
 
     // Bewusst ohne remember: liest die Link-Maps, damit neue Treffer sofort Filter und Zähler aktualisieren.
-    val queryTokens = TextNorm.tokens(state.query)
-    val visible = state.releases.filter { r ->
-        r.genres.any { it in state.genres } &&
-            (!state.onlyYouTube || vm.isOnYouTube(r)) &&
-            (!state.onlySpotify || vm.isOnSpotify(r)) &&
-            (queryTokens.isEmpty() || TextNorm.tokens("${r.artist} ${r.title} ${r.label.orEmpty()}").let { hay ->
-                queryTokens.all { t -> hay.any { it.startsWith(t) } }
-            })
-    }
+    val visible = state.filter.apply(state.releases, vm::isOnYouTube, vm::isOnSpotify)
     val bottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
 
     Box(
@@ -151,7 +151,8 @@ fun MainScreen(vm: MainViewModel = viewModel()) {
                 stickyHeader {
                     FilterBar(
                         state = state,
-                        onPeriod = vm::selectPeriod,
+                        onPeriod = { p -> if (p == Period.CUSTOM) showFilters = true else vm.selectPeriod(p) },
+                        onOpenFilters = { showFilters = true },
                         onGenre = vm::toggleGenre,
                         onOnlyYouTube = vm::toggleOnlyYouTube,
                         onOnlySpotify = vm::toggleOnlySpotify,
@@ -160,7 +161,7 @@ fun MainScreen(vm: MainViewModel = viewModel()) {
 
                 item {
                   Column {
-                    SearchField(state.query, vm::setQuery)
+                    SearchField(state.filter.query, vm::setQuery)
                     Row(
                         Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -174,7 +175,7 @@ fun MainScreen(vm: MainViewModel = viewModel()) {
                 }
 
                 if (visible.isEmpty() && !state.loading) {
-                    item { EmptyState(if (state.releases.isEmpty()) state.error ?: "Noch keine Releases.\nRunterziehen zum Scannen." else if ((state.onlyYouTube && vm.ytMatching.isNotEmpty()) || (state.onlySpotify && vm.spotifyMatching.isNotEmpty())) "Abgleich läuft noch …" else "Keine Treffer für diese Filter.") }
+                    item { EmptyState(if (state.releases.isEmpty()) state.error ?: "Noch keine Releases.\nRunterziehen zum Scannen." else if ((state.filter.onlyYouTube && vm.ytMatching.isNotEmpty()) || (state.filter.onlySpotify && vm.spotifyMatching.isNotEmpty())) "Abgleich läuft noch …" else "Keine Treffer für diese Filter.") }
                 }
 
                 items(visible, key = { it.key }) { r ->
@@ -192,6 +193,17 @@ fun MainScreen(vm: MainViewModel = viewModel()) {
                 }
             }
         }
+    }
+
+    if (showFilters) {
+        FilterSheet(
+            state = state,
+            subgenres = ReleaseFilter.subgenreCounts(state.releases),
+            onDismiss = { showFilters = false },
+            onChange = vm::updateFilter,
+            onReset = vm::resetPanelFilters,
+            onScanYears = { years -> vm.scanYears(years); showFilters = false },
+        )
     }
 
     if (showSettings) {
@@ -246,6 +258,7 @@ private fun Header(loading: Boolean, onRefresh: () -> Unit, onSettings: () -> Un
 private fun FilterBar(
     state: UiState,
     onPeriod: (Period) -> Unit,
+    onOpenFilters: () -> Unit,
     onGenre: (Genre) -> Unit,
     onOnlyYouTube: () -> Unit,
     onOnlySpotify: () -> Unit,
@@ -259,11 +272,13 @@ private fun FilterBar(
         PeriodTabs(state.period, onPeriod)
         Spacer(Modifier.height(10.dp))
         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            val active = state.filter.activeCount
+            NeonChip(if (active > 0) "Filter · $active" else "Filter", selected = active > 0, color = Neon.Cyan, onClick = onOpenFilters)
             Genre.entries.forEach { g ->
-                NeonChip(g.label, selected = g in state.genres, color = genreColor(g)) { onGenre(g) }
+                NeonChip(g.label, selected = g in state.filter.genres, color = genreColor(g)) { onGenre(g) }
             }
-            NeonChip("Nur auf YT Music", selected = state.onlyYouTube, color = Neon.YouTubeRed, onClick = onOnlyYouTube)
-            NeonChip("Nur auf Spotify", selected = state.onlySpotify, color = Neon.SpotifyGreen, onClick = onOnlySpotify)
+            NeonChip("Nur auf YT Music", selected = state.filter.onlyYouTube, color = Neon.YouTubeRed, onClick = onOnlyYouTube)
+            NeonChip("Nur auf Spotify", selected = state.filter.onlySpotify, color = Neon.SpotifyGreen, onClick = onOnlySpotify)
         }
     }
 }
@@ -293,9 +308,10 @@ private fun PeriodTabs(current: Period, onSelect: (Period) -> Unit) {
                 Text(
                     p.label.uppercase(),
                     color = lerp(Neon.TextDim, Neon.Bg, selected),
-                    fontSize = 12.sp,
+                    fontSize = 11.sp,
                     fontWeight = FontWeight.Black,
-                    letterSpacing = 1.sp,
+                    letterSpacing = 0.3.sp,
+                    maxLines = 1,
                 )
             }
         }
@@ -334,8 +350,9 @@ private fun StatusLine(state: UiState) {
                 modifier = Modifier.padding(top = 6.dp),
             )
         } else if (state.scannedAt != null) {
+            val range = if (state.period == Period.CUSTOM) "JAHRE ${state.years.first}–${state.years.last} · " else ""
             Text(
-                "STAND ${STAMP_FMT.format(java.util.Date(state.scannedAt))} · RUNTERZIEHEN ZUM AKTUALISIEREN",
+                "${range}STAND ${STAMP_FMT.format(java.util.Date(state.scannedAt))} · RUNTERZIEHEN ZUM AKTUALISIEREN",
                 color = Neon.TextDim,
                 fontSize = 10.sp,
                 fontFamily = FontFamily.Monospace,
@@ -384,7 +401,7 @@ private fun ReleaseCard(
 ) {
     val shape = RoundedCornerShape(22.dp)
     val accent = genreColor(release.genres.firstOrNull() ?: Genre.DNB)
-    val isNew = !release.releaseDate.isBefore(LocalDate.now().minusDays(2))
+    val isNew = release.dateLabel == null && !release.releaseDate.isBefore(LocalDate.now().minusDays(2))
     Column(
         modifier
             .fillMaxWidth()
@@ -422,7 +439,7 @@ private fun ReleaseCard(
                 Text(release.artist, color = accent, fontSize = 14.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    listOfNotNull(release.releaseDate.format(DATE_FMT), release.label, release.type).joinToString("  ·  "),
+                    listOfNotNull(release.dateLabel ?: release.releaseDate.format(DATE_FMT), release.label, release.type).joinToString("  ·  "),
                     color = Neon.TextDim,
                     fontSize = 11.sp,
                     fontFamily = FontFamily.Monospace,
@@ -491,6 +508,131 @@ private fun ReleaseCard(
         }
     }
 }
+
+@Composable
+private fun FilterSheet(
+    state: UiState,
+    subgenres: List<Pair<String, Int>>,
+    onDismiss: () -> Unit,
+    onChange: ((ReleaseFilter) -> ReleaseFilter) -> Unit,
+    onReset: () -> Unit,
+    onScanYears: (IntRange) -> Unit,
+) {
+    val currentYear = LocalDate.now().year
+    var years by remember { mutableStateOf(state.years.first.toFloat()..state.years.last.toFloat()) }
+    val from = years.start.toInt()
+    val to = years.endInclusive.toInt()
+    val f = state.filter
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        containerColor = Neon.Surface,
+    ) {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 24.dp)
+                .navigationBarsPadding(),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Text("FILTER", style = TextStyle(brush = NeonGradient, fontSize = 22.sp, fontWeight = FontWeight.Black, fontStyle = FontStyle.Italic))
+
+            SectionTitle("Release-Jahr von – bis")
+            Text(
+                if (from == to) "$from" else "$from – $to",
+                color = Neon.Acid,
+                fontSize = 28.sp,
+                fontWeight = FontWeight.Black,
+                fontFamily = FontFamily.Monospace,
+            )
+            RangeSlider(
+                value = years,
+                onValueChange = { years = it },
+                valueRange = MIN_YEAR.toFloat()..currentYear.toFloat(),
+                steps = (currentYear - MIN_YEAR - 1).coerceAtLeast(0),
+            )
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf(
+                    "90er" to (1990..1999),
+                    "2000er" to (2000..2009),
+                    "2010er" to (2010..2019),
+                    "2020er" to (2020..currentYear),
+                    "Dieses Jahr" to (currentYear..currentYear),
+                ).forEach { (label, range) ->
+                    NeonChip(label, selected = from == range.first && to == range.last, color = Neon.Acid) {
+                        years = range.first.toFloat()..range.last.toFloat()
+                    }
+                }
+            }
+            Button(
+                onClick = { onScanYears(from..to) },
+                modifier = Modifier.fillMaxWidth().height(50.dp),
+                shape = RoundedCornerShape(14.dp),
+            ) {
+                Text("JAHRE $from–$to SCANNEN", fontWeight = FontWeight.Black, letterSpacing = 1.sp)
+            }
+            Text(
+                "Ältere Jahre kommen von MusicBrainz. Bandcamp liefert nur die neuesten Releases (ca. letzte 3 Monate).",
+                color = Neon.TextDim,
+                fontSize = 12.sp,
+            )
+
+            SectionTitle("Sortierung")
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                SortOrder.entries.forEach { o ->
+                    NeonChip(o.label, selected = f.sort == o, color = Neon.Cyan) { onChange { it.copy(sort = o) } }
+                }
+            }
+
+            SectionTitle("Release-Typ")
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                TypeFilter.entries.forEach { t ->
+                    NeonChip(t.label, selected = f.type == t, color = Neon.Cyan) { onChange { it.copy(type = t) } }
+                }
+            }
+            SwitchRow("Compilations / Various Artists ausblenden", f.hideCompilations) { on ->
+                onChange { it.copy(hideCompilations = on) }
+            }
+
+            if (subgenres.isNotEmpty()) {
+                SectionTitle("Subgenres / Tags")
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    subgenres.forEach { (tag, count) ->
+                        NeonChip("$tag  $count", selected = tag in f.subgenres, color = Neon.Magenta) {
+                            onChange { it.copy(subgenres = if (tag in it.subgenres) it.subgenres - tag else it.subgenres + tag) }
+                        }
+                    }
+                }
+            }
+
+            SectionTitle("Quellen")
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Source.entries.forEach { src ->
+                    NeonChip(src.label, selected = src in f.sources, color = Neon.Cyan) {
+                        onChange {
+                            val next = if (src in it.sources) it.sources - src else it.sources + src
+                            it.copy(sources = next.ifEmpty { Source.entries.toSet() })
+                        }
+                    }
+                }
+            }
+
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(top = 8.dp)) {
+                OutlinedButton(onClick = onReset, modifier = Modifier.weight(1f).height(50.dp), shape = RoundedCornerShape(14.dp)) {
+                    Text("Zurücksetzen")
+                }
+                Button(onClick = onDismiss, modifier = Modifier.weight(1f).height(50.dp), shape = RoundedCornerShape(14.dp)) {
+                    Text("FERTIG", fontWeight = FontWeight.Black, letterSpacing = 1.sp)
+                }
+            }
+        }
+    }
+}
+
+private const val MIN_YEAR = 1990
 
 @Composable
 private fun SettingsSheet(

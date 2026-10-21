@@ -16,22 +16,36 @@ import java.time.LocalDate
  */
 class MusicBrainzSource(private val http: Http) {
 
-    suspend fun fetch(from: LocalDate, to: LocalDate, maxPages: Int): List<Release> = withContext(Dispatchers.IO) {
-        val query = buildQuery(from, to)
+    data class Result(val releases: List<Release>, val total: Int, val loaded: Int)
+
+    /**
+     * [queryFrom]/[queryTo] sind die Grenzen im Such-Index (z.B. "1995" bzw. "2026-10-21"), damit auch
+     * Releases mit unvollständigem Datum (nur Jahr) gefunden werden.
+     */
+    suspend fun fetch(
+        from: LocalDate,
+        to: LocalDate,
+        maxPages: Int,
+        queryFrom: String = from.toString(),
+        queryTo: String = to.toString(),
+    ): Result = withContext(Dispatchers.IO) {
+        val query = buildQuery(queryFrom, queryTo)
         val out = mutableListOf<Release>()
         var offset = 0
+        var total = 0
         for (page in 0 until maxPages) {
             if (page > 0) delay(1100)
             val url = "https://musicbrainz.org/ws/2/release-group/?fmt=json&limit=$PAGE_SIZE&offset=$offset&query=" +
                 URLEncoder.encode(query, "UTF-8")
             val json = JSONObject(http.get(url, mapOf("User-Agent" to Http.APP_UA, "Accept" to "application/json")))
+            total = json.optInt("count", 0)
             val parsed = parse(json)
             parsed.filterTo(out) { it.releaseDate in from..to }
             val groups = json.optJSONArray("release-groups")?.length() ?: 0
             offset += groups
-            if (groups == 0 || offset >= json.optInt("count", 0)) break
+            if (groups == 0 || offset >= total) break
         }
-        out
+        Result(out, total, offset)
     }
 
     companion object {
@@ -43,9 +57,25 @@ class MusicBrainzSource(private val http: Http) {
             "ragga jungle", "atmospheric drum and bass", "jungle drum and bass",
         )
 
-        fun buildQuery(from: LocalDate, to: LocalDate): String {
+        fun buildQuery(from: String, to: String): String {
             val tags = TAGS.joinToString(" OR ") { "tag:\"$it\"" }
             return "firstreleasedate:[$from TO $to] AND ($tags)"
+        }
+
+        /** Akzeptiert "2026-10-15", "2026-10" und "2026" (unvollständige Daten = erster Tag). */
+        fun parseDate(raw: String): LocalDate? = runCatching {
+            when (raw.length) {
+                10 -> LocalDate.parse(raw)
+                7 -> LocalDate.parse("$raw-01")
+                4 -> LocalDate.of(raw.toInt(), 1, 1)
+                else -> null
+            }
+        }.getOrNull()
+
+        fun dateLabel(raw: String): String? = when (raw.length) {
+            7 -> "${raw.substring(5)}.${raw.take(4)}"
+            4 -> raw
+            else -> null
         }
 
         fun parse(json: JSONObject): List<Release> {
@@ -57,8 +87,7 @@ class MusicBrainzSource(private val http: Http) {
                 val title = rg.optString("title")
                 if (id.isBlank() || title.isBlank()) continue
                 val rawDate = rg.optString("first-release-date")
-                if (rawDate.length != 10) continue // nur vollständige Daten (YYYY-MM-DD)
-                val date = runCatching { LocalDate.parse(rawDate) }.getOrNull() ?: continue
+                val date = parseDate(rawDate) ?: continue
 
                 val credits = rg.optJSONArray("artist-credit")
                 val artist = buildString {
@@ -94,6 +123,7 @@ class MusicBrainzSource(private val http: Http) {
                     sourceUrls = mapOf(Source.MUSICBRAINZ to "https://musicbrainz.org/release-group/$id"),
                     coverUrl = "https://coverartarchive.org/release-group/$id/front-250",
                     tags = GenreClassifier.displayTags(tagNames),
+                    dateLabel = dateLabel(rawDate),
                 )
             }
             return out

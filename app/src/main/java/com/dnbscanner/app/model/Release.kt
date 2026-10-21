@@ -16,7 +16,11 @@ enum class Source(val label: String) {
 enum class Period(val days: Long, val label: String, val pageFactor: Int) {
     WEEK(7, "Woche", 1),
     MONTH(30, "Monat", 3),
-    QUARTER(90, "3 Monate", 6),
+    QUARTER(90, "3 Mon.", 6),
+    YEAR(365, "1 Jahr", 8),
+
+    /** Eigener Zeitraum: Release-Jahr von–bis. */
+    CUSTOM(0, "Von–Bis", 6),
 }
 
 data class Release(
@@ -31,6 +35,8 @@ data class Release(
     val coverUrl: String?,
     /** Genre-Tags der Quelle (DnB/Jungle-Tags zuerst). */
     val tags: List<String> = emptyList(),
+    /** Anzeige für unvollständige Daten, z.B. "1996" oder "05.1996"; null = genaues Datum. */
+    val dateLabel: String? = null,
 ) {
     val key: String get() = TextNorm.releaseKey(artist, title)
 }

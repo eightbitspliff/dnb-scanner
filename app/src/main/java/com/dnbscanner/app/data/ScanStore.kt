@@ -40,12 +40,14 @@ class ScanStore(context: Context) {
                         .put("sources", JSONArray(r.sources.map { it.name }))
                         .put("urls", urls)
                         .put("cover", r.coverUrl ?: "")
-                        .put("tags", JSONArray(r.tags)),
+                        .put("tags", JSONArray(r.tags))
+                        .put("dateLabel", r.dateLabel ?: ""),
                 )
             }
             return JSONObject()
                 .put("version", FORMAT_VERSION)
                 .put("rejected", result.rejected)
+                .put("range", result.rangeKey)
                 .put("scannedAt", result.scannedAt)
                 .put("warnings", JSONArray(result.warnings))
                 .put("releases", arr)
@@ -71,10 +73,11 @@ class ScanStore(context: Context) {
                     sourceUrls = urls.keys().asSequence().associate { Source.valueOf(it) to urls.getString(it) },
                     coverUrl = o.optString("cover").ifBlank { null },
                     tags = o.optJSONArray("tags")?.let { t -> (0 until t.length()).map { t.getString(it) } } ?: emptyList(),
+                    dateLabel = o.optString("dateLabel").ifBlank { null },
                 )
             }
             val warnings = json.optJSONArray("warnings")?.let { w -> (0 until w.length()).map { w.getString(it) } } ?: emptyList()
-            return ScanResult(period, releases, warnings, json.optLong("scannedAt"), json.optInt("rejected"))
+            return ScanResult(period, releases, warnings, json.optLong("scannedAt"), json.optInt("rejected"), json.optString("range"))
         }
     }
 }

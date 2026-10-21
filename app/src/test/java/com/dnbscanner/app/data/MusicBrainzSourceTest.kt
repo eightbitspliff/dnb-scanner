@@ -36,8 +36,18 @@ class MusicBrainzSourceTest {
 
     @Test
     fun queryContainsDateRangeAndTags() {
-        val q = MusicBrainzSource.buildQuery(LocalDate.of(2026, 10, 13), LocalDate.of(2026, 10, 20))
+        val q = MusicBrainzSource.buildQuery("2026-10-13", "2026-10-20")
         assertTrue(q.startsWith("firstreleasedate:[2026-10-13 TO 2026-10-20] AND ("))
         assertTrue(q.contains("tag:\"jungle\""))
+    }
+
+    @Test
+    fun acceptsPartialDates() {
+        assertEquals(LocalDate.of(1996, 1, 1), MusicBrainzSource.parseDate("1996"))
+        assertEquals(LocalDate.of(1996, 5, 1), MusicBrainzSource.parseDate("1996-05"))
+        assertEquals(null, MusicBrainzSource.parseDate(""))
+        assertEquals("1996", MusicBrainzSource.dateLabel("1996"))
+        assertEquals("05.1996", MusicBrainzSource.dateLabel("1996-05"))
+        assertEquals(null, MusicBrainzSource.dateLabel("1996-05-17"))
     }
 }

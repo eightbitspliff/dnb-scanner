@@ -19,21 +19,40 @@ data class ScanResult(
     val scannedAt: Long,
     /** Kandidaten, die die Genre-Prüfung nicht bestanden haben. */
     val rejected: Int = 0,
+    /** Bei [Period.CUSTOM]: gescannte Jahre, z.B. "1995-2001". */
+    val rangeKey: String = "",
 )
 
 class ReleaseRepository(http: Http, private val tagStore: TagStore = MemoryTagStore()) {
     private val bandcamp = BandcampSource(http)
     private val musicBrainz = MusicBrainzSource(http)
 
-    suspend fun scan(period: Period, settings: Settings, progress: (String) -> Unit): ScanResult = coroutineScope {
-        val to = LocalDate.now()
-        val from = to.minusDays(period.days)
+    suspend fun scan(
+        period: Period,
+        settings: Settings,
+        years: IntRange? = null,
+        progress: (String) -> Unit,
+    ): ScanResult = coroutineScope {
+        val today = LocalDate.now()
+        val custom = period == Period.CUSTOM && years != null
+        val from = if (custom) LocalDate.of(years!!.first, 1, 1) else today.minusDays(period.days)
+        val to = if (custom) minOf(LocalDate.of(years!!.last, 12, 31), today) else today
         val warnings = mutableListOf<String>()
 
         val mb = async {
             if (!settings.useMusicBrainz) return@async emptyList()
             try {
-                musicBrainz.fetch(from, to, maxPages = 2 + period.pageFactor)
+                val result = if (custom) {
+                    musicBrainz.fetch(from, to, maxPages = 15, queryFrom = from.year.toString(), queryTo = to.toString())
+                } else {
+                    musicBrainz.fetch(from, to, maxPages = 2 + period.pageFactor)
+                }
+                if (result.total > result.loaded) {
+                    synchronized(warnings) {
+                        warnings += "MusicBrainz: ${result.loaded} von ${result.total} Treffern geladen – Zeitraum eingrenzen für mehr"
+                    }
+                }
+                result.releases
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -43,7 +62,12 @@ class ReleaseRepository(http: Http, private val tagStore: TagStore = MemoryTagSt
         }
 
         val candidates = mutableListOf<Release>()
-        if (settings.useBandcamp) {
+        // Bandcamp lässt sich nur nach "neu" durchblättern (bis zum Seitenlimit) – ältere Zeiträume sind darüber nicht erreichbar.
+        val bandcampReachable = to >= today.minusDays(Period.QUARTER.days)
+        if (settings.useBandcamp && !bandcampReachable) {
+            synchronized(warnings) { warnings += "Bandcamp nur für Zeiträume bis vor 3 Monaten verfügbar – ältere Jahre kommen von MusicBrainz" }
+        }
+        if (settings.useBandcamp && bandcampReachable) {
             val pages = settings.bandcampPagesPerWeek * period.pageFactor
             for (tag in settings.bandcampTags) {
                 try {
@@ -60,7 +84,11 @@ class ReleaseRepository(http: Http, private val tagStore: TagStore = MemoryTagSt
 
         progress("MusicBrainz wird abgefragt …")
         val all = verified + mb.await()
-        ScanResult(period, merge(all), warnings.toList(), System.currentTimeMillis(), rejected = unique.size - verified.size)
+        ScanResult(
+            period, merge(all), synchronized(warnings) { warnings.toList() }, System.currentTimeMillis(),
+            rejected = unique.size - verified.size,
+            rangeKey = if (custom) "${years!!.first}-${years.last}" else "",
+        )
     }
 
     /** Prüft jedes Bandcamp-Release anhand der Tags auf seiner Seite und behält nur echtes DnB/Jungle. */
@@ -102,8 +130,12 @@ class ReleaseRepository(http: Http, private val tagStore: TagStore = MemoryTagSt
         fun merge(releases: List<Release>): List<Release> =
             releases.groupBy { it.key }.values.map { group ->
                 group.reduce { a, b ->
+                    // Genaues Datum hat Vorrang vor unvollständigem (nur Jahr/Monat).
+                    val exact = listOf(a, b).filter { it.dateLabel == null }
+                    val dated = if (exact.size == 1) exact[0] else if (a.releaseDate <= b.releaseDate) a else b
                     a.copy(
-                        releaseDate = minOf(a.releaseDate, b.releaseDate),
+                        releaseDate = dated.releaseDate,
+                        dateLabel = dated.dateLabel,
                         label = a.label ?: b.label,
                         type = a.type ?: b.type,
                         genres = a.genres + b.genres,

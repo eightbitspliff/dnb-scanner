@@ -5,7 +5,10 @@ oder der letzten **3 Monate** sucht und jedes Release mit **YouTube Music** verk
 
 ## Funktionen
 
-- Zeitraum per Umschalter: Woche / Monat / 3 Monate
+- Zeitraum per Umschalter: Woche / Monat / 3 Monate / 1 Jahr / **Von–Bis** (Release-Jahre frei wählbar, z.B. 1993–1997;
+  ältere Jahre kommen von MusicBrainz, Bandcamp liefert nur die neuesten Releases)
+- **Filter-Panel**: Release-Jahr von–bis, Sortierung (neueste/älteste/Artist/Titel), Release-Typ (Alben & EPs /
+  Singles & Tracks), Subgenres/Tags (z.B. liquid funk, neurofunk, ragga jungle), Quellen, Compilations ausblenden
 - Quellen:
   - **Bandcamp** (Discover-Feed „neu“ für die Tags `drum-and-bass`, `drum-bass`, `jungle` – in den Einstellungen änderbar)
   - **MusicBrainz** (Release-Groups mit DnB-/Jungle-Tags im gewählten Zeitraum)
