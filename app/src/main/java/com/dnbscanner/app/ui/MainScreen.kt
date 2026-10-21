@@ -108,7 +108,8 @@ fun MainScreen(vm: MainViewModel = viewModel()) {
     val queryTokens = TextNorm.tokens(state.query)
     val visible = state.releases.filter { r ->
         r.genres.any { it in state.genres } &&
-            (!state.onlyMatched || vm.hasDirectLink(r)) &&
+            (!state.onlyYouTube || vm.isOnYouTube(r)) &&
+            (!state.onlySpotify || vm.isOnSpotify(r)) &&
             (queryTokens.isEmpty() || TextNorm.tokens("${r.artist} ${r.title} ${r.label.orEmpty()}").let { hay ->
                 queryTokens.all { t -> hay.any { it.startsWith(t) } }
             })
@@ -152,7 +153,8 @@ fun MainScreen(vm: MainViewModel = viewModel()) {
                         state = state,
                         onPeriod = vm::selectPeriod,
                         onGenre = vm::toggleGenre,
-                        onOnlyMatched = vm::toggleOnlyMatched,
+                        onOnlyYouTube = vm::toggleOnlyYouTube,
+                        onOnlySpotify = vm::toggleOnlySpotify,
                     )
                 }
 
@@ -172,7 +174,7 @@ fun MainScreen(vm: MainViewModel = viewModel()) {
                 }
 
                 if (visible.isEmpty() && !state.loading) {
-                    item { EmptyState(if (state.releases.isEmpty()) state.error ?: "Noch keine Releases.\nRunterziehen zum Scannen." else "Keine Treffer für diese Filter.") }
+                    item { EmptyState(if (state.releases.isEmpty()) state.error ?: "Noch keine Releases.\nRunterziehen zum Scannen." else if ((state.onlyYouTube && vm.ytMatching.isNotEmpty()) || (state.onlySpotify && vm.spotifyMatching.isNotEmpty())) "Abgleich läuft noch …" else "Keine Treffer für diese Filter.") }
                 }
 
                 items(visible, key = { it.key }) { r ->
@@ -245,7 +247,8 @@ private fun FilterBar(
     state: UiState,
     onPeriod: (Period) -> Unit,
     onGenre: (Genre) -> Unit,
-    onOnlyMatched: () -> Unit,
+    onOnlyYouTube: () -> Unit,
+    onOnlySpotify: () -> Unit,
 ) {
     Column(
         Modifier
@@ -259,7 +262,8 @@ private fun FilterBar(
             Genre.entries.forEach { g ->
                 NeonChip(g.label, selected = g in state.genres, color = genreColor(g)) { onGenre(g) }
             }
-            NeonChip("Nur direkte Links", selected = state.onlyMatched, color = Neon.Magenta, onClick = onOnlyMatched)
+            NeonChip("Nur auf YT Music", selected = state.onlyYouTube, color = Neon.YouTubeRed, onClick = onOnlyYouTube)
+            NeonChip("Nur auf Spotify", selected = state.onlySpotify, color = Neon.SpotifyGreen, onClick = onOnlySpotify)
         }
     }
 }

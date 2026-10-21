@@ -35,7 +35,9 @@ data class UiState(
     val error: String? = null,
     val genres: Set<Genre> = Genre.entries.toSet(),
     val query: String = "",
-    val onlyMatched: Boolean = false,
+    /** Nur Releases mit direktem Treffer auf YouTube Music bzw. Spotify anzeigen. */
+    val onlyYouTube: Boolean = false,
+    val onlySpotify: Boolean = false,
     val settings: Settings = Settings(),
 )
 
@@ -172,8 +174,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun spotifyLinkFor(release: Release): MusicLink =
         spotifyLinks[release.key] ?: MusicLink(SpotifyMatcher.searchUrl(release), direct = false)
 
-    fun hasDirectLink(release: Release): Boolean =
-        ytLinks[release.key]?.direct == true || spotifyLinks[release.key]?.direct == true
+    fun isOnYouTube(release: Release): Boolean = ytLinks[release.key]?.direct == true
+
+    fun isOnSpotify(release: Release): Boolean = spotifyLinks[release.key]?.direct == true
 
     fun setQuery(q: String) = _state.update { it.copy(query = q) }
 
@@ -182,7 +185,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         it.copy(genres = next.ifEmpty { Genre.entries.toSet() })
     }
 
-    fun toggleOnlyMatched() = _state.update { it.copy(onlyMatched = !it.onlyMatched) }
+    fun toggleOnlyYouTube() = _state.update { it.copy(onlyYouTube = !it.onlyYouTube) }
+
+    fun toggleOnlySpotify() = _state.update { it.copy(onlySpotify = !it.onlySpotify) }
 
     fun updateSettings(s: Settings) {
         settingsStore.save(s)

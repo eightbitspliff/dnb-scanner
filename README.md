@@ -20,7 +20,7 @@ oder der letzten **3 Monate** sucht und jedes Release mit **YouTube Music** verk
     (ca. 10 Releases pro Minute, läuft im Hintergrund weiter)
   - sonst Spotify-Suche mit Artist + Titel
 - Dunkles Neon-Design im Rave-Look mit Equalizer im 174-BPM-Takt, Pull-to-Refresh
-- Filter nach Genre, „Nur mit YT-Music-Treffer“, Textsuche (Artist/Titel/Label)
+- Filter nach Genre, „Nur auf YT Music“, „Nur auf Spotify“, Textsuche (Artist/Titel/Label)
 - Teilen-Button, Links zur Quelle (Bandcamp / MusicBrainz)
 - Ergebnisse werden pro Zeitraum gespeichert und nach 6 Stunden automatisch aktualisiert
 
