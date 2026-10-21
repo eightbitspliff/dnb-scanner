@@ -1,11 +1,8 @@
 name: API Probe
 
+# Nur manuell: Actions -> API Probe -> Run workflow
 on:
   workflow_dispatch:
-  push:
-    paths:
-      - tools/api-probe.sh
-      - .github/workflows/api-probe.yml
 
 jobs:
   probe:

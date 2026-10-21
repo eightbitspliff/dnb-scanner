@@ -53,10 +53,38 @@ class BandcampSource(private val http: Http) {
         out
     }
 
+    /** Lädt die Tags von der Release-Seite. Leere Liste = Seite ohne Tags (z.B. Bot-Sperre). */
+    suspend fun fetchTags(itemUrl: String): List<String> = withContext(Dispatchers.IO) {
+        val html = try {
+            http.get(itemUrl, mapOf("User-Agent" to Http.BROWSER_UA))
+        } catch (e: HttpStatusException) {
+            if (e.code != 429) throw e
+            delay(2500)
+            http.get(itemUrl, mapOf("User-Agent" to Http.BROWSER_UA))
+        }
+        parseTags(html)
+    }
+
     companion object {
         const val URL = "https://bandcamp.com/api/discover/1/discover_web"
         private const val PAGE_SIZE = 60
         private val DATE = DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH)
+
+        private val TAG_LINK = Regex("<a[^>]*class=\"tag\"[^>]*>\\s*([^<]+?)\\s*</a>")
+        private val KEYWORDS = Regex("\"keywords\"\\s*:\\s*\\[(.*?)]", RegexOption.DOT_MATCHES_ALL)
+        private val QUOTED = Regex("\"((?:[^\"\\\\]|\\\\.)*)\"")
+
+        fun parseTags(html: String): List<String> {
+            val tags = LinkedHashSet<String>()
+            TAG_LINK.findAll(html).forEach { tags += unescape(it.groupValues[1]).trim().lowercase() }
+            KEYWORDS.find(html)?.let { m ->
+                QUOTED.findAll(m.groupValues[1]).forEach { tags += unescape(it.groupValues[1]).trim().lowercase() }
+            }
+            return tags.filter { it.isNotBlank() }
+        }
+
+        private fun unescape(s: String) = s
+            .replace("&amp;", "&").replace("&#39;", "'").replace("&quot;", "\"").replace("\\u0026", "&")
 
         fun genreForTag(tag: String): Genre = if (tag.contains("jungle")) Genre.JUNGLE else Genre.DNB
 
@@ -85,6 +113,15 @@ class BandcampSource(private val http: Http) {
                 "a" -> "Album/EP"
                 else -> null
             }
+            val tags = mutableListOf<String>()
+            for (key in listOf("tags", "tag_names", "genre_tags")) {
+                val arr = item.optJSONArray(key) ?: continue
+                for (t in 0 until arr.length()) {
+                    val v = arr.opt(t)
+                    val name = if (v is JSONObject) v.optString("name").ifBlank { v.optString("norm_name") } else v?.toString()
+                    if (!name.isNullOrBlank()) tags += name.lowercase()
+                }
+            }
             return Release(
                 artist = artist,
                 title = title,
@@ -95,6 +132,7 @@ class BandcampSource(private val http: Http) {
                 sources = setOf(Source.BANDCAMP),
                 sourceUrls = mapOf(Source.BANDCAMP to url),
                 coverUrl = imageId?.let { "https://f4.bcbits.com/img/a${it}_9.jpg" },
+                tags = tags,
             )
         }
 

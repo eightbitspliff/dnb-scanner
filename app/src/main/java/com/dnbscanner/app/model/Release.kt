@@ -29,6 +29,8 @@ data class Release(
     val sources: Set<Source>,
     val sourceUrls: Map<Source, String>,
     val coverUrl: String?,
+    /** Genre-Tags der Quelle (DnB/Jungle-Tags zuerst). */
+    val tags: List<String> = emptyList(),
 ) {
     val key: String get() = TextNorm.releaseKey(artist, title)
 }

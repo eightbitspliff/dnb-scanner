@@ -18,6 +18,8 @@ class MusicBrainzSourceTest {
                "artist-credit":[{"name":"Alix Perez","joinphrase":" & "},{"name":"Monty"}],
                "tags":[{"count":1,"name":"drum and bass"},{"count":1,"name":"Ragga Jungle"}]},
               {"id":"bbb","title":"Only year","first-release-date":"2026","artist-credit":[{"name":"X"}]},
+              {"id":"ddd","title":"Trance thing","first-release-date":"2026-10-01","artist-credit":[{"name":"Y"}],
+               "tags":[{"name":"trance"},{"name":"drum and bass"},{"name":"dubstep"}]},
               {"id":"ccc","title":"Liquid","first-release-date":"2026-09-30","primary-type":"Single",
                "secondary-types":["Remix"],"artist-credit":[{"name":"Calibre"}],"tags":[{"name":"liquid funk"}]}
             ]}

@@ -52,4 +52,20 @@ class BandcampSourceTest {
         assertEquals(LocalDate.of(2026, 9, 1), BandcampSource.parseDate("2026-09-01T00:00:00Z"))
         assertNull(BandcampSource.parseDate("garbage"))
     }
+
+    @Test
+    fun parsesTagsFromReleasePage() {
+        val html = """
+            <script type="application/ld+json">{"@type":"MusicAlbum","keywords":["Electronic","drum &amp; bass","jungle"]}</script>
+            <div class="tralbum-tags">
+              <a class="tag" href="https://bandcamp.com/discover/electronic">electronic</a>
+              <a href="https://bandcamp.com/discover/drum-and-bass" class="tag">
+                drum &amp; bass
+              </a>
+              <a class="tag" href="https://bandcamp.com/discover/liquid">liquid</a>
+            </div>
+        """.trimIndent()
+        assertEquals(listOf("electronic", "drum & bass", "liquid", "jungle"), BandcampSource.parseTags(html))
+        assertEquals(emptyList<String>(), BandcampSource.parseTags("<html>challenge</html>"))
+    }
 }

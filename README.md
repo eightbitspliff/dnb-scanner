@@ -9,6 +9,9 @@ oder der letzten **3 Monate** sucht und jedes Release mit **YouTube Music** verk
 - Quellen:
   - **Bandcamp** (Discover-Feed „neu“ für die Tags `drum-and-bass`, `drum-bass`, `jungle` – in den Einstellungen änderbar)
   - **MusicBrainz** (Release-Groups mit DnB-/Jungle-Tags im gewählten Zeitraum)
+- **Strenge Genre-Prüfung**: Jedes Release wird anhand seiner eigenen Tags geprüft (bei Bandcamp von der
+  Release-Seite). Es erscheint nur, wenn DnB-/Jungle-Tags vorhanden sind und nicht von anderen Genres
+  (House, Techno, Trance, Dubstep, Lo-Fi, …) überwogen werden. Die Tags stehen auf jeder Karte.
 - Doppelte Einträge aus mehreren Quellen werden zusammengeführt (Artist + Titel, ohne Katalognummern/„EP“)
 - **YouTube-Music-Abgleich**: Für jedes Release wird in YouTube Music nach Album bzw. Song gesucht.
   - ▶ **YouTube Music** = direkter Link zum gefundenen Album/Song (öffnet die YT-Music-App)

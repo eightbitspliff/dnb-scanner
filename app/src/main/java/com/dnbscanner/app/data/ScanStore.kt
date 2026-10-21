@@ -39,16 +39,23 @@ class ScanStore(context: Context) {
                         .put("genres", JSONArray(r.genres.map { it.name }))
                         .put("sources", JSONArray(r.sources.map { it.name }))
                         .put("urls", urls)
-                        .put("cover", r.coverUrl ?: ""),
+                        .put("cover", r.coverUrl ?: "")
+                        .put("tags", JSONArray(r.tags)),
                 )
             }
             return JSONObject()
+                .put("version", FORMAT_VERSION)
+                .put("rejected", result.rejected)
                 .put("scannedAt", result.scannedAt)
                 .put("warnings", JSONArray(result.warnings))
                 .put("releases", arr)
         }
 
-        fun fromJson(period: Period, json: JSONObject): ScanResult {
+        /** Version 2: strenge Genre-Prüfung – ältere, ungeprüfte Ergebnisse werden verworfen. */
+        private const val FORMAT_VERSION = 2
+
+        fun fromJson(period: Period, json: JSONObject): ScanResult? {
+            if (json.optInt("version") != FORMAT_VERSION) return null
             val arr = json.getJSONArray("releases")
             val releases = (0 until arr.length()).map { i ->
                 val o = arr.getJSONObject(i)
@@ -63,10 +70,11 @@ class ScanStore(context: Context) {
                     sources = o.getJSONArray("sources").let { s -> (0 until s.length()).map { Source.valueOf(s.getString(it)) }.toSet() },
                     sourceUrls = urls.keys().asSequence().associate { Source.valueOf(it) to urls.getString(it) },
                     coverUrl = o.optString("cover").ifBlank { null },
+                    tags = o.optJSONArray("tags")?.let { t -> (0 until t.length()).map { t.getString(it) } } ?: emptyList(),
                 )
             }
             val warnings = json.optJSONArray("warnings")?.let { w -> (0 until w.length()).map { w.getString(it) } } ?: emptyList()
-            return ScanResult(period, releases, warnings, json.optLong("scannedAt"))
+            return ScanResult(period, releases, warnings, json.optLong("scannedAt"), json.optInt("rejected"))
         }
     }
 }

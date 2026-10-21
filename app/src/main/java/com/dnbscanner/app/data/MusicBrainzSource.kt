@@ -74,7 +74,8 @@ class MusicBrainzSource(private val http: Http) {
                 rg.optJSONArray("tags")?.let { tags ->
                     for (t in 0 until tags.length()) tags.optJSONObject(t)?.optString("name")?.let { tagNames += it.lowercase() }
                 }
-                val genres = genresFromTags(tagNames)
+                val genres = GenreClassifier.classify(tagNames)
+                if (genres.isEmpty()) continue // Tags passen nicht (genug) zu DnB/Jungle
 
                 val secondary = rg.optJSONArray("secondary-types")
                 val type = buildList {
@@ -92,19 +93,10 @@ class MusicBrainzSource(private val http: Http) {
                     sources = setOf(Source.MUSICBRAINZ),
                     sourceUrls = mapOf(Source.MUSICBRAINZ to "https://musicbrainz.org/release-group/$id"),
                     coverUrl = "https://coverartarchive.org/release-group/$id/front-250",
+                    tags = GenreClassifier.displayTags(tagNames),
                 )
             }
             return out
-        }
-
-        fun genresFromTags(tags: List<String>): Set<Genre> {
-            val result = mutableSetOf<Genre>()
-            if (tags.any { "jungle" in it }) result += Genre.JUNGLE
-            if (tags.any { t -> listOf("drum", "dnb", "neurofunk", "liquid", "jump up", "techstep", "darkstep").any { it in t } }) {
-                result += Genre.DNB
-            }
-            if (result.isEmpty()) result += Genre.DNB
-            return result
         }
     }
 }

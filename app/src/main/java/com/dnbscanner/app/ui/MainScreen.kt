@@ -342,6 +342,16 @@ private fun StatusLine(state: UiState) {
                 letterSpacing = 1.sp,
             )
         }
+        if (state.rejected > 0 && !state.loading) {
+            Text(
+                "${state.rejected} KANDIDATEN AUSSORTIERT (KEIN DNB/JUNGLE)",
+                color = Neon.TextDim,
+                fontSize = 10.sp,
+                fontFamily = FontFamily.Monospace,
+                letterSpacing = 1.sp,
+                modifier = Modifier.padding(top = 2.dp),
+            )
+        }
         (state.warnings + listOfNotNull(state.error?.takeIf { state.releases.isNotEmpty() })).forEach {
             Text("⚠ $it", color = Neon.Amber, fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp))
         }
@@ -419,6 +429,17 @@ private fun ReleaseCard(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
+                if (release.tags.isNotEmpty()) {
+                    Text(
+                        release.tags.take(4).joinToString("  ") { "#$it" },
+                        color = accent.copy(alpha = 0.7f),
+                        fontSize = 10.sp,
+                        fontFamily = FontFamily.Monospace,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(top = 2.dp),
+                    )
+                }
             }
         }
 

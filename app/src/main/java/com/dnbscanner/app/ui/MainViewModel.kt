@@ -6,6 +6,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.dnbscanner.app.data.Http
 import com.dnbscanner.app.data.LinkCache
+import com.dnbscanner.app.data.PrefsTagStore
 import com.dnbscanner.app.data.ReleaseRepository
 import com.dnbscanner.app.data.ScanStore
 import com.dnbscanner.app.data.Settings
@@ -32,6 +33,7 @@ data class UiState(
     val loading: Boolean = false,
     val progress: String? = null,
     val warnings: List<String> = emptyList(),
+    val rejected: Int = 0,
     val error: String? = null,
     val genres: Set<Genre> = Genre.entries.toSet(),
     val query: String = "",
@@ -43,7 +45,7 @@ data class UiState(
 
 class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val http = Http()
-    private val repository = ReleaseRepository(http)
+    private val repository = ReleaseRepository(http, PrefsTagStore(app))
     private val ytCache = LinkCache(app, "yt_matches")
     private val spotifyCache = LinkCache(app, "spotify_matches")
     private val ytMatcher = YouTubeMusicMatcher(http, ytCache)
@@ -74,11 +76,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         _state.update { it.copy(period = period, loading = false, progress = null, error = null) }
         val cached = scanStore.load(period)
         if (cached != null) {
-            _state.update { it.copy(releases = cached.releases, scannedAt = cached.scannedAt, warnings = cached.warnings) }
+            _state.update { it.copy(releases = cached.releases, scannedAt = cached.scannedAt, warnings = cached.warnings, rejected = cached.rejected) }
             startMatching(cached.releases)
             if (System.currentTimeMillis() - cached.scannedAt > STALE_MS) scan()
         } else {
-            _state.update { it.copy(releases = emptyList(), scannedAt = null, warnings = emptyList()) }
+            _state.update { it.copy(releases = emptyList(), scannedAt = null, warnings = emptyList(), rejected = 0) }
             scan()
         }
     }
@@ -97,6 +99,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                         releases = result.releases,
                         scannedAt = result.scannedAt,
                         warnings = result.warnings,
+                        rejected = result.rejected,
                         loading = false,
                         progress = null,
                         error = if (result.releases.isEmpty() && result.warnings.isNotEmpty()) "Keine Daten – Netzwerk prüfen." else null,
